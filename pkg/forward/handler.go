@@ -61,6 +61,11 @@ func (h *ForwardHandler) Provision(ctx caddy.Context) error {
 	return nil
 }
 
+// SetRequester is a test helper to set the requester without provisioning.
+func (h *ForwardHandler) SetRequester(r *subreq.Requester) {
+	h.requester = r
+}
+
 func (h *ForwardHandler) Validate() error {
 	if h.URL == "" {
 		return fmt.Errorf("forward: url is required")

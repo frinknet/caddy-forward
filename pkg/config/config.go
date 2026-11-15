@@ -7,6 +7,7 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
+	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 )
 
 const (
@@ -16,6 +17,15 @@ const (
 
 func init() {
 	caddy.RegisterModule(App{})
+	httpcaddyfile.RegisterGlobalOption("forward", parseGlobalForward)
+}
+
+func parseGlobalForward(d *caddyfile.Dispenser, existingVal any) (any, error) {
+	app := &App{}
+	if err := app.UnmarshalCaddyfile(d); err != nil {
+		return nil, err
+	}
+	return app, nil
 }
 
 // App is the optional global app module `forward`.
