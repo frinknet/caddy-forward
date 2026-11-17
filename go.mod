@@ -1,4 +1,4 @@
-module github.com/you/caddy-forward
+module github.com/frinknet/caddy-forward
 
 go 1.22
 

@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	DefaultTimeout         = 10 * time.Second
+	DefaultTimeout         = 5 * time.Second
 	DefaultMaxResponseSize = 10 * 1024 * 1024 // 10 MiB
 )
 

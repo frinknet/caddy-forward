@@ -1,4 +1,4 @@
-package caddyforward
+package forward
 
 import (
 	"context"
@@ -11,14 +11,13 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
-	"github.com/you/caddy-forward/pkg/forward"
-	"github.com/you/caddy-forward/pkg/subreq"
+	"github.com/frinknet/caddy-forward/pkg/subreq"
 )
 
 // ── Validate() tests ──────────────────────────────────────────────────────
 
 func TestForwardHandlerBodyOnGetFailsValidation(t *testing.T) {
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "GET",
 		URL:    "http://example.com",
 		Body:   "should not be allowed",
@@ -31,7 +30,7 @@ func TestForwardHandlerBodyOnGetFailsValidation(t *testing.T) {
 }
 
 func TestForwardHandlerMissingUrlFailsValidation(t *testing.T) {
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "GET",
 		URL:    "",
 	}
@@ -43,7 +42,7 @@ func TestForwardHandlerMissingUrlFailsValidation(t *testing.T) {
 }
 
 func TestForwardHandlerUnsupportedMethodFailsValidation(t *testing.T) {
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "CONNECT",
 		URL:    "http://example.com",
 	}
@@ -55,7 +54,7 @@ func TestForwardHandlerUnsupportedMethodFailsValidation(t *testing.T) {
 }
 
 func TestForwardHandlerValidPostPassesValidation(t *testing.T) {
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "POST",
 		URL:    "http://example.com",
 		Body:   "valid body",
@@ -68,7 +67,7 @@ func TestForwardHandlerValidPostPassesValidation(t *testing.T) {
 }
 
 func TestForwardHandlerValidGetPassesValidation(t *testing.T) {
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "GET",
 		URL:    "http://example.com",
 	}
@@ -80,7 +79,7 @@ func TestForwardHandlerValidGetPassesValidation(t *testing.T) {
 }
 
 func TestForwardHandlerTraceFailsValidation(t *testing.T) {
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "TRACE",
 		URL:    "http://example.com",
 	}
@@ -104,7 +103,7 @@ func TestForwardHandlerServeGetOK(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "GET",
 		URL:    backend.URL,
 	}
@@ -142,7 +141,7 @@ func TestForwardHandlerServePostWithBody(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "POST",
 		URL:    backend.URL,
 		Body:   "request-body",
@@ -176,10 +175,10 @@ func TestForwardHandlerServeWithParams(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "GET",
 		URL:    backend.URL,
-		Params: []forward.Param{forward.Param{Name: "q", Value: "caddy"}},
+		Params: []Param{Param{Name: "q", Value: "caddy"}},
 	}
 	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
 
@@ -206,11 +205,11 @@ func TestForwardHandlerServeWithHeaders(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "GET",
 		URL:    backend.URL,
-		Headers: []forward.Header{
-			forward.Header{Name: "Authorization", Value: "Bearer secret"},
+		Headers: []Header{
+			Header{Name: "Authorization", Value: "Bearer secret"},
 		},
 	}
 	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
@@ -230,7 +229,7 @@ func TestForwardHandlerServeUpstream5xx(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "GET",
 		URL:    backend.URL,
 	}
@@ -254,7 +253,7 @@ func TestForwardHandlerServeUpstream5xx(t *testing.T) {
 }
 
 func TestForwardHandlerServeNetworkErrorReturns502(t *testing.T) {
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "GET",
 		URL:    "http://127.0.0.1:1/",
 	}
@@ -284,7 +283,7 @@ func TestForwardHandlerServeWithPlaceholderURL(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "GET",
 		URL:    backend.URL + "/{http.request.uri.path}",
 	}
@@ -316,10 +315,10 @@ func TestForwardHandlerServeWithPlaceholderParam(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "GET",
 		URL:    backend.URL,
-		Params: []forward.Param{{Name: "q", Value: "{http.request.uri.query.q}"}},
+		Params: []Param{{Name: "q", Value: "{http.request.uri.query.q}"}},
 	}
 	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
 
@@ -350,10 +349,10 @@ func TestForwardHandlerServeWithPlaceholderHeader(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	h := forward.ForwardHandler{
+	h := ForwardHandler{
 		Method: "GET",
 		URL:    backend.URL,
-		Headers: []forward.Header{
+		Headers: []Header{
 			{Name: "Authorization", Value: "Bearer {http.request.header.Token}"},
 		},
 	}

@@ -1,4 +1,4 @@
-package caddyforward
+package forward
 
 import (
 	"context"
@@ -12,23 +12,22 @@ import (
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
-	"github.com/you/caddy-forward/pkg/config"
-	"github.com/you/caddy-forward/pkg/forward"
-	"github.com/you/caddy-forward/pkg/subreq"
+	"github.com/frinknet/caddy-forward/pkg/config"
+	"github.com/frinknet/caddy-forward/pkg/subreq"
 )
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-func parseForward(input string) (*forward.ForwardHandler, error) {
+func parseForward(input string) (*ForwardHandler, error) {
 	d := caddyfile.NewTestDispenser(input)
-	var h forward.ForwardHandler
+	var h ForwardHandler
 	if err := h.UnmarshalCaddyfile(d); err != nil {
 		return nil, err
 	}
 	return &h, nil
 }
 
-func parseForwardBlock(input string) (*forward.ForwardHandler, error) {
+func parseForwardBlock(input string) (*ForwardHandler, error) {
 	full := "forward " + input
 	return parseForward(full)
 }

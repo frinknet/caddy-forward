@@ -1,15 +1,13 @@
-package caddyforward
+package encoding
 
 import (
 	"strings"
 	"testing"
-
-	"github.com/you/caddy-forward/pkg/encoding"
 )
 
 func TestEncodeFormPairs(t *testing.T) {
 	d := map[string]any{"a": "1", "b": "2"}
-	result, err := encoding.EncodeForm(d)
+	result, err := EncodeForm(d)
 	if err != nil {
 		t.Errorf("EncodeForm should succeed: %v", err)
 	}
@@ -23,7 +21,7 @@ func TestEncodeFormPairs(t *testing.T) {
 
 func TestEncodeFormSpecialChars(t *testing.T) {
 	d := map[string]any{"key": "hello world"}
-	result, err := encoding.EncodeForm(d)
+	result, err := EncodeForm(d)
 	if err != nil {
 		t.Errorf("EncodeForm should succeed: %v", err)
 	}
@@ -36,7 +34,7 @@ func TestEncodeFormSpecialChars(t *testing.T) {
 }
 
 func TestEncodeFormEmpty(t *testing.T) {
-	result, err := encoding.EncodeForm(map[string]any{})
+	result, err := EncodeForm(map[string]any{})
 	if err != nil {
 		t.Errorf("EncodeForm should succeed on empty dict: %v", err)
 	}
@@ -47,34 +45,34 @@ func TestEncodeFormEmpty(t *testing.T) {
 
 func TestHasBinaryTrue(t *testing.T) {
 	d := map[string]any{"a": []byte{1, 2, 3}}
-	if !encoding.HasBinary(d) {
+	if !HasBinary(d) {
 		t.Errorf("HasBinary should detect []byte values")
 	}
 }
 
 func TestHasBinaryFalse(t *testing.T) {
 	d2 := map[string]any{"a": "string"}
-	if encoding.HasBinary(d2) {
+	if HasBinary(d2) {
 		t.Errorf("HasBinary should return false for string values")
 	}
 }
 
 func TestHasBinaryEmpty(t *testing.T) {
-	if encoding.HasBinary(map[string]any{}) {
+	if HasBinary(map[string]any{}) {
 		t.Errorf("HasBinary should return false for empty dict")
 	}
 }
 
 func TestHasBinaryMixed(t *testing.T) {
 	d := map[string]any{"a": "text", "b": []byte{0x01}}
-	if !encoding.HasBinary(d) {
+	if !HasBinary(d) {
 		t.Errorf("HasBinary should detect []byte even among strings")
 	}
 }
 
 func TestEncodeMultipartField(t *testing.T) {
 	d := map[string]any{"field": "value"}
-	body, ct, err := encoding.EncodeMultipart(d)
+	body, ct, err := EncodeMultipart(d)
 	if err != nil {
 		t.Errorf("EncodeMultipart should succeed: %v", err)
 	}
@@ -94,7 +92,7 @@ func TestEncodeMultipartField(t *testing.T) {
 
 func TestEncodeMultipartBinary(t *testing.T) {
 	d := map[string]any{"file": []byte{0x01, 0x02, 0x03}}
-	body, ct, err := encoding.EncodeMultipart(d)
+	body, ct, err := EncodeMultipart(d)
 	if err != nil {
 		t.Errorf("EncodeMultipart should succeed with binary: %v", err)
 	}
@@ -107,7 +105,7 @@ func TestEncodeMultipartBinary(t *testing.T) {
 }
 
 func TestEncodeMultipartEmpty(t *testing.T) {
-	body, ct, err := encoding.EncodeMultipart(map[string]any{})
+	body, ct, err := EncodeMultipart(map[string]any{})
 	if err != nil {
 		t.Errorf("EncodeMultipart should succeed on empty dict: %v", err)
 	}
@@ -121,28 +119,28 @@ func TestEncodeMultipartEmpty(t *testing.T) {
 }
 
 func TestMergeQueryBothNonEmpty(t *testing.T) {
-	result := encoding.MergeQuery("a=1", "b=2")
+	result := MergeQuery("a=1", "b=2")
 	if result != "a=1&b=2" {
 		t.Errorf("should append with &: got %q", result)
 	}
 }
 
 func TestMergeQueryEmptyExisting(t *testing.T) {
-	result := encoding.MergeQuery("", "b=2")
+	result := MergeQuery("", "b=2")
 	if result != "b=2" {
 		t.Errorf("should return incoming when existing is empty: got %q", result)
 	}
 }
 
 func TestMergeQueryEmptyIncoming(t *testing.T) {
-	result := encoding.MergeQuery("a=1", "")
+	result := MergeQuery("a=1", "")
 	if result != "a=1" {
 		t.Errorf("should return existing when incoming is empty: got %q", result)
 	}
 }
 
 func TestMergeQueryBothEmpty(t *testing.T) {
-	result := encoding.MergeQuery("", "")
+	result := MergeQuery("", "")
 	if result != "" {
 		t.Errorf("should return empty when both empty: got %q", result)
 	}
@@ -150,14 +148,14 @@ func TestMergeQueryBothEmpty(t *testing.T) {
 
 func TestMergeQueryVerbatim(t *testing.T) {
 	// Values are used verbatim — no URL-encoding applied
-	result := encoding.MergeQuery("a=1", "b=c d")
+	result := MergeQuery("a=1", "b=c d")
 	if result != "a=1&b=c d" {
 		t.Errorf("should keep incoming verbatim: got %q", result)
 	}
 }
 
 func TestMergeQueryDictAddKeys(t *testing.T) {
-	result, err := encoding.MergeQueryDict("a=1", map[string]any{"b": "2"})
+	result, err := MergeQueryDict("a=1", map[string]any{"b": "2"})
 	if err != nil {
 		t.Errorf("MergeQueryDict should succeed: %v", err)
 	}
@@ -167,7 +165,7 @@ func TestMergeQueryDictAddKeys(t *testing.T) {
 }
 
 func TestMergeQueryDictOverwrite(t *testing.T) {
-	result, err := encoding.MergeQueryDict("a=1&b=2", map[string]any{"a": "3"})
+	result, err := MergeQueryDict("a=1&b=2", map[string]any{"a": "3"})
 	if err != nil {
 		t.Errorf("MergeQueryDict should succeed: %v", err)
 	}
@@ -184,7 +182,7 @@ func TestMergeQueryDictOverwrite(t *testing.T) {
 }
 
 func TestMergeQueryDictEmptyExisting(t *testing.T) {
-	result, err := encoding.MergeQueryDict("", map[string]any{"a": "1"})
+	result, err := MergeQueryDict("", map[string]any{"a": "1"})
 	if err != nil {
 		t.Errorf("MergeQueryDict should succeed with empty existing: %v", err)
 	}
@@ -194,7 +192,7 @@ func TestMergeQueryDictEmptyExisting(t *testing.T) {
 }
 
 func TestMergeQueryDictEmptyNew(t *testing.T) {
-	result, err := encoding.MergeQueryDict("a=1", map[string]any{})
+	result, err := MergeQueryDict("a=1", map[string]any{})
 	if err != nil {
 		t.Errorf("MergeQueryDict should succeed with empty dict: %v", err)
 	}

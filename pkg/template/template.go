@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/templates"
-	"github.com/you/caddy-forward/pkg/config"
-	"github.com/you/caddy-forward/pkg/subreq"
+	"github.com/frinknet/caddy-forward/pkg/config"
+	"github.com/frinknet/caddy-forward/pkg/subreq"
 )
 
 func init() {
@@ -23,9 +24,13 @@ type Functions struct {
 
 func (Functions) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
-		ID:  "http.handlers.template_functions.methods",
+		ID:  "http.handlers.templates.functions.forward_methods",
 		New: func() caddy.Module { return new(Functions) },
 	}
+}
+
+func (f *Functions) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
+	return nil
 }
 
 func (f *Functions) Provision(ctx caddy.Context) error {
@@ -62,5 +67,6 @@ func (f *Functions) send(method, url string, headers, data any) subreq.Response 
 var (
 	_ caddy.Module              = (*Functions)(nil)
 	_ caddy.Provisioner         = (*Functions)(nil)
+	_ caddyfile.Unmarshaler     = (*Functions)(nil)
 	_ templates.CustomFunctions = (*Functions)(nil)
 )

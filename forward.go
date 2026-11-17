@@ -3,7 +3,7 @@
 package caddyforward
 
 import (
-	_ "github.com/you/caddy-forward/pkg/config"
-	_ "github.com/you/caddy-forward/pkg/forward"
-	_ "github.com/you/caddy-forward/pkg/template"
+	_ "github.com/frinknet/caddy-forward/pkg/config"
+	_ "github.com/frinknet/caddy-forward/pkg/forward"
+	_ "github.com/frinknet/caddy-forward/pkg/template"
 )

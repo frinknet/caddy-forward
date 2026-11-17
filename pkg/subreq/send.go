@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/you/caddy-forward/pkg/encoding"
+	"github.com/frinknet/caddy-forward/pkg/encoding"
 )
 
 // IsBodyMethod reports whether the method sends data in the request body.

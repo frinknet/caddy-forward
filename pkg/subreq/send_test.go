@@ -1,4 +1,4 @@
-package caddyforward
+package subreq
 
 import (
 	"context"
@@ -9,13 +9,11 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/you/caddy-forward/pkg/subreq"
 )
 
 // Helper: shared requester with generous limits.
-func testRequester() *subreq.Requester {
-	return subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024)
+func testRequester() *Requester {
+	return NewRequester(5 * time.Second, 10 * 1024 * 1024)
 }
 
 // Helper: inspect incoming request with a dict body for form/multipart analysis.
@@ -325,7 +323,7 @@ func TestSendCustomHeaders(t *testing.T) {
 // ── Error-path tests ──────────────────────────────────────────────────────
 
 func TestSendNetworkFailure(t *testing.T) {
-	r := subreq.NewRequester(1 * time.Second, 10 * 1024 * 1024)
+	r := NewRequester(1 * time.Second, 10 * 1024 * 1024)
 	resp := r.Send(context.Background(), "GET", "http://127.0.0.1:1/nonexistent", nil, nil)
 	if resp.Err == nil {
 		t.Errorf("network failure should set Err")
@@ -345,7 +343,7 @@ func TestSendResponseExceedsMaxSize(t *testing.T) {
 	}))
 	defer server.Close()
 
-	r := subreq.NewRequester(5 * time.Second, 5) // max 5 bytes
+	r := NewRequester(5 * time.Second, 5) // max 5 bytes
 	resp := r.Send(context.Background(), "GET", server.URL, nil, nil)
 	if resp.Err == nil {
 		t.Errorf("oversize response should set Err")
@@ -455,7 +453,7 @@ func TestMergeQueryIntoURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := subreq.MergeQueryIntoURL(tt.rawURL, tt.qs)
+			result := MergeQueryIntoURL(tt.rawURL, tt.qs)
 			if result != tt.expected {
 				t.Errorf("MergeQueryIntoURL(%q, %q) = %q, want %q", tt.rawURL, tt.qs, result, tt.expected)
 			}

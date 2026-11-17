@@ -8,8 +8,8 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
-	"github.com/you/caddy-forward/pkg/config"
-	"github.com/you/caddy-forward/pkg/subreq"
+	"github.com/frinknet/caddy-forward/pkg/config"
+	"github.com/frinknet/caddy-forward/pkg/subreq"
 )
 
 func init() {

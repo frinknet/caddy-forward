@@ -1,4 +1,4 @@
-package caddyforward
+package template
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/you/caddy-forward/pkg/subreq"
+	"github.com/frinknet/caddy-forward/pkg/subreq"
 )
 
 // ── Template rendering with mock functions ───────────────────────────────
