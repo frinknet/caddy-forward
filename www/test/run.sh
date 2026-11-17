@@ -65,6 +65,12 @@ check "template DELETE"     "/t/template-delete.html"  "DELETE http://127.0.0.1:
 # 10. template OPTIONS
 check "template OPTIONS"    "/t/template-options.html" "OPTIONS http://127.0.0.1:2082/"
 
+# 11. forward USE (serves exactly that template, with query and body)
+check "forward USE"         "/t-use"                   "usefile:/t-use q=caddy b=hello body"
+
+# 12. template USE (include with context passthrough)
+check "template USE"        "/t/template-use.html"     "before(child:/template-use.html)after"
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 

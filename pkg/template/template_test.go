@@ -7,10 +7,15 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"text/template"
 	"testing"
 	"time"
 
+	"github.com/caddyserver/caddy/v2"
+	caddytpl "github.com/caddyserver/caddy/v2/modules/caddyhttp/templates"
 	"github.com/frinknet/caddy-forward/pkg/subreq"
 )
 
@@ -193,5 +198,114 @@ func TestTemplateIntegrationNetworkError(t *testing.T) {
 	out := render(t, `before{{ GET "http://127.0.0.1:1/x" nil nil }}after`, funcs)
 	if out != "beforeafter" {
 		t.Errorf("should continue past network error, got %q", out)
+	}
+}
+
+// ── USE template function ────────────────────────────────────────────────
+
+func writeFile(t *testing.T, dir, name, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+}
+
+func testContext(t *testing.T, dir, target string) *caddytpl.TemplateContext {
+	t.Helper()
+	funcs := MethodFuncs(subreq.NewRequester(5*time.Second, 1024))
+	req := httptest.NewRequest("GET", target, nil)
+	repl := caddy.NewReplacer()
+	repl.Set("http.request.uri.path", target)
+	req = req.WithContext(context.WithValue(req.Context(), caddy.ReplacerCtxKey, repl))
+	return &caddytpl.TemplateContext{
+		Root:        http.Dir(dir),
+		Req:         req,
+		CustomFuncs: []template.FuncMap{funcs},
+	}
+}
+
+func TestMethodFuncsIncludesUse(t *testing.T) {
+	funcs := MethodFuncs(subreq.NewRequester(5*time.Second, 1024))
+	if _, ok := funcs["USE"]; !ok {
+		t.Errorf("MethodFuncs should expose USE")
+	}
+	for _, m := range []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"} {
+		if _, ok := funcs[m]; !ok {
+			t.Errorf("MethodFuncs should still expose %s", m)
+		}
+	}
+}
+
+func TestUseDefaultsToContextDot(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "child.html", `path={{ .Req.URL.Path }} {{ placeholder "http.request.uri.path" }}`)
+
+	ctx := testContext(t, dir, "/from-context")
+	out, err := Use("child.html", ctx)
+	if err != nil {
+		t.Fatalf("USE should render: %v", err)
+	}
+	if out != "path=/from-context /from-context" {
+		t.Errorf("child should receive the parent context, got %q", out)
+	}
+}
+
+func TestUsePassesCustomDot(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "child.html", `hi {{ .Name }}`)
+
+	ctx := testContext(t, dir, "/")
+	out, err := Use("child.html", ctx, map[string]any{"Name": "Bob"})
+	if err != nil {
+		t.Fatalf("USE should render: %v", err)
+	}
+	if out != "hi Bob" {
+		t.Errorf("child should see the passed data as its dot, got %q", out)
+	}
+}
+
+func TestUseNests(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "outer.html", `outer({{ USE "inner.html" . }})`)
+	writeFile(t, dir, "inner.html", `inner:{{ .Req.URL.Path }}`)
+
+	ctx := testContext(t, dir, "/nested")
+	out, err := Use("outer.html", ctx)
+	if err != nil {
+		t.Fatalf("nested USE should render: %v", err)
+	}
+	if out != "outer(inner:/nested)" {
+		t.Errorf("unexpected nested render: %q", out)
+	}
+}
+
+func TestUseRendersInsideParentTemplate(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "child.html", `[{{ .Req.URL.Query.Get "q" }}]`)
+
+	ctx := testContext(t, dir, "/?q=42")
+	tpl, err := ctx.NewTemplate("parent").Parse(`before {{ USE "child.html" . }} after`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var sb strings.Builder
+	if err := tpl.Execute(&sb, ctx); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if sb.String() != "before [42] after" {
+		t.Errorf("unexpected render: %q", sb.String())
+	}
+}
+
+func TestUseWithoutContextIsAnError(t *testing.T) {
+	if _, err := Use("child.html", map[string]any{"Name": "Bob"}); err == nil {
+		t.Errorf("USE without a template context should error")
+	}
+}
+
+func TestUseMissingFileIsAnError(t *testing.T) {
+	ctx := testContext(t, t.TempDir(), "/")
+	if _, err := Use("nope.html", ctx); err == nil {
+		t.Errorf("USE of a missing file should error")
 	}
 }

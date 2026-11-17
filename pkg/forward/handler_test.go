@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -373,5 +375,92 @@ func TestForwardHandlerServeWithPlaceholderHeader(t *testing.T) {
 	resp := recorder.Result()
 	if resp.Header.Get("X-Echo") != "Bearer secret123" {
 		t.Errorf("placeholder should be replaced in header value, got %q", resp.Header.Get("X-Echo"))
+	}
+}
+
+// ── USE (forward USE path) ────────────────────────────────────────────────
+
+func TestForwardUseRequiresPath(t *testing.T) {
+	h := ForwardHandler{Method: MethodUse}
+	if err := h.Validate(); err == nil {
+		t.Errorf("USE without a path should fail validation")
+	}
+}
+
+func TestForwardUseRejectsHeader(t *testing.T) {
+	h := ForwardHandler{Method: MethodUse, URL: "page.html", Headers: []Header{{Name: "X", Value: "y"}}}
+	if err := h.Validate(); err == nil {
+		t.Errorf("USE should reject header")
+	}
+}
+
+func useHandler(t *testing.T, dir, path, contents string) *ForwardHandler {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, path), []byte(contents), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+	h := &ForwardHandler{Method: MethodUse, URL: path}
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
+	return h
+}
+
+func useRequest(dir, target string) *http.Request {
+	req := httptest.NewRequest("GET", target, nil)
+	req = req.WithContext(context.WithValue(req.Context(), caddyhttp.VarsCtxKey, map[string]any{}))
+	caddyhttp.NewTestReplacer(req)
+	caddyhttp.SetVar(req.Context(), "root", dir)
+	return req
+}
+
+func TestForwardUseServesTemplate(t *testing.T) {
+	dir := t.TempDir()
+	h := useHandler(t, dir, "page.html", `hello {{ .Req.URL.Path }} {{ placeholder "http.request.uri.path" }}`)
+
+	recorder := httptest.NewRecorder()
+	if err := h.ServeHTTP(recorder, useRequest(dir, "/page"), nil); err != nil {
+		t.Fatalf("ServeHTTP should succeed: %v", err)
+	}
+	if recorder.Code != http.StatusOK {
+		t.Errorf("status should be 200, got %d", recorder.Code)
+	}
+	if got := recorder.Body.String(); got != "hello /page /page" {
+		t.Errorf("unexpected body: %q", got)
+	}
+	if ct := recorder.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("content type should be html, got %q", ct)
+	}
+}
+
+func TestForwardUsePassesQueryAndBody(t *testing.T) {
+	dir := t.TempDir()
+	h := useHandler(t, dir, "page.html", `q={{ placeholder "http.request.uri.query.q" }} b={{ placeholder "http.request.body" }}`)
+	h.Params = []Param{{Name: "q", Value: "caddy"}}
+	h.Body = "hello body"
+
+	recorder := httptest.NewRecorder()
+	if err := h.ServeHTTP(recorder, useRequest(dir, "/page"), nil); err != nil {
+		t.Fatalf("ServeHTTP should succeed: %v", err)
+	}
+	if got := recorder.Body.String(); got != "q=caddy b=hello body" {
+		t.Errorf("query and body should reach the template, got %q", got)
+	}
+}
+
+func TestForwardUseMissingFileIs500(t *testing.T) {
+	dir := t.TempDir()
+	h := &ForwardHandler{Method: MethodUse, URL: "nope.html"}
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
+
+	recorder := httptest.NewRecorder()
+	err := h.ServeHTTP(recorder, useRequest(dir, "/missing"), nil)
+	if err == nil {
+		t.Fatalf("missing template should be an error")
+	}
+	httpErr, ok := err.(caddyhttp.HandlerError)
+	if !ok {
+		t.Fatalf("missing template should be a caddyhttp.HandlerError, got %T", err)
+	}
+	if httpErr.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status should be 500, got %d", httpErr.StatusCode)
 	}
 }

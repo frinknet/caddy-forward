@@ -1,13 +1,16 @@
 package template
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"text/template"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
-	"github.com/caddyserver/caddy/v2/modules/caddyhttp/templates"
+	caddytpl "github.com/caddyserver/caddy/v2/modules/caddyhttp/templates"
 	"github.com/frinknet/caddy-forward/pkg/config"
 	"github.com/frinknet/caddy-forward/pkg/subreq"
 )
@@ -17,7 +20,7 @@ func init() {
 }
 
 // Functions implements caddyhttp.CustomFunctions, exposing GET/HEAD/POST/PUT/
-// PATCH/DELETE/OPTIONS as template functions.
+// PATCH/DELETE/OPTIONS plus USE as template functions.
 type Functions struct {
 	requester *subreq.Requester
 }
@@ -49,24 +52,97 @@ func (f *Functions) Provision(ctx caddy.Context) error {
 }
 
 func (f *Functions) CustomTemplateFunctions() template.FuncMap {
+	return MethodFuncs(f.requester)
+}
+
+// MethodFuncs builds the template functions exposed under the
+// `forward_methods` extension: one per HTTP method, plus USE.
+func MethodFuncs(r *subreq.Requester) template.FuncMap {
+	send := func(method string) func(string, any, any) subreq.Response {
+		return func(url string, headers, data any) subreq.Response {
+			return r.Send(context.Background(), method, url, headers, data)
+		}
+	}
 	return template.FuncMap{
-		"GET":     func(url string, headers, data any) subreq.Response { return f.send("GET", url, headers, data) },
-		"HEAD":    func(url string, headers, data any) subreq.Response { return f.send("HEAD", url, headers, data) },
-		"POST":    func(url string, headers, data any) subreq.Response { return f.send("POST", url, headers, data) },
-		"PUT":     func(url string, headers, data any) subreq.Response { return f.send("PUT", url, headers, data) },
-		"PATCH":   func(url string, headers, data any) subreq.Response { return f.send("PATCH", url, headers, data) },
-		"DELETE":  func(url string, headers, data any) subreq.Response { return f.send("DELETE", url, headers, data) },
-		"OPTIONS": func(url string, headers, data any) subreq.Response { return f.send("OPTIONS", url, headers, data) },
+		"GET":     send("GET"),
+		"HEAD":    send("HEAD"),
+		"POST":    send("POST"),
+		"PUT":     send("PUT"),
+		"PATCH":   send("PATCH"),
+		"DELETE":  send("DELETE"),
+		"OPTIONS": send("OPTIONS"),
+		"USE":     Use,
 	}
 }
 
-func (f *Functions) send(method, url string, headers, data any) subreq.Response {
-	return f.requester.Send(context.Background(), method, url, headers, data)
+// Use renders another template file in place, like `include`, but it carries
+// the parent template's context through so existing variables are already in
+// scope without remapping them.
+//
+// The parent context must be passed explicitly, since Go template functions
+// never see the implicit dot:
+//
+//	{{ USE "partials/row.html" . }}
+//	{{ . | USE "partials/row.html" }}
+//
+// To give the child a different dot while still resolving files against the
+// site root, pass the context first and the child data last:
+//
+//	{{ . | USE "partials/row.html" $ctx }}
+func Use(filename string, args ...any) (string, error) {
+	var ctx *caddytpl.TemplateContext
+	var data any
+	for _, arg := range args {
+		if c, ok := arg.(*caddytpl.TemplateContext); ok && ctx == nil {
+			ctx = c
+			continue
+		}
+		data = arg
+	}
+	if ctx == nil {
+		return "", fmt.Errorf("USE %s: needs the template context; call it as {{ USE %q . }}", filename, filename)
+	}
+	if data == nil {
+		data = ctx
+	}
+	return RenderFile(ctx, filename, data)
+}
+
+// RenderFile parses and executes the template file at path, using data as the
+// child's dot. All built-in Caddy functions and the context's custom functions
+// (including GET/POST/... and USE) are available to the child.
+func RenderFile(ctx *caddytpl.TemplateContext, path string, data any) (string, error) {
+	if ctx.Root == nil {
+		return "", fmt.Errorf("forward: no file root configured for %s", path)
+	}
+
+	file, err := ctx.Root.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	src, err := io.ReadAll(file)
+	if err != nil {
+		return "", err
+	}
+
+	local := *ctx
+	tpl := local.NewTemplate(path)
+	if _, err := tpl.Parse(string(src)); err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	if err := tpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 var (
-	_ caddy.Module              = (*Functions)(nil)
-	_ caddy.Provisioner         = (*Functions)(nil)
-	_ caddyfile.Unmarshaler     = (*Functions)(nil)
-	_ templates.CustomFunctions = (*Functions)(nil)
+	_ caddy.Module             = (*Functions)(nil)
+	_ caddy.Provisioner        = (*Functions)(nil)
+	_ caddyfile.Unmarshaler    = (*Functions)(nil)
+	_ caddytpl.CustomFunctions = (*Functions)(nil)
 )

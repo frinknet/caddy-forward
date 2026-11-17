@@ -61,4 +61,13 @@
 		}
 		file_server
 	}
+
+	# 11. forward USE (serve exactly that template, with query and body)
+	route /t-use {
+		root * /srv/www/test/tmpl
+		forward USE use-page.html {
+			param q caddy
+			body  "hello body"
+		}
+	}
 }

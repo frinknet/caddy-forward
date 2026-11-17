@@ -609,3 +609,37 @@ func TestCaddyfileParseAndServeNetworkError(t *testing.T) {
 		t.Errorf("error should be HandlerError, got %T", serveErr)
 	}
 }
+
+// ── USE (forward USE path) ────────────────────────────────────────────────
+
+func TestForwardUseParses(t *testing.T) {
+	h, err := parseForwardBlock(`USE page.html`)
+	if err != nil {
+		t.Fatalf("forward USE should parse: %v", err)
+	}
+	if h.Method != MethodUse {
+		t.Errorf("method should be USE, got %q", h.Method)
+	}
+	if h.URL != "page.html" {
+		t.Errorf("url should be the template path, got %q", h.URL)
+	}
+	if err := h.Validate(); err != nil {
+		t.Errorf("USE with just a path should validate: %v", err)
+	}
+}
+
+func TestForwardUseParsesQueryAndBody(t *testing.T) {
+	h, err := parseForwardBlock("USE page.html {\n\t\tparam q caddy\n\t\tbody hello\n\t}")
+	if err != nil {
+		t.Fatalf("forward USE with query and body should parse: %v", err)
+	}
+	if len(h.Params) != 1 || h.Params[0].Name != "q" || h.Params[0].Value != "caddy" {
+		t.Errorf("param should parse, got %+v", h.Params)
+	}
+	if h.Body != "hello" {
+		t.Errorf("body should parse, got %q", h.Body)
+	}
+	if err := h.Validate(); err != nil {
+		t.Errorf("USE with query and body should validate: %v", err)
+	}
+}

@@ -28,6 +28,10 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 //	    header NAME VALUE
 //	    body   STRING
 //	}
+//
+// or, to render a template file instead of making a request:
+//
+//	forward USE path/to/file.html
 func (h *ForwardHandler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	if !d.Next() {
 		return d.ArgErr()
@@ -82,7 +86,7 @@ func (h *ForwardHandler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 }
 
 func validMethod(m string) bool {
-	return subreq.IsQueryMethod(m) || subreq.IsBodyMethod(m)
+	return m == MethodUse || subreq.IsQueryMethod(m) || subreq.IsBodyMethod(m)
 }
 
 var (
