@@ -332,3 +332,26 @@ and you get the defaults.
 | Implicit parent context in `USE` | ❌ | Go template functions cannot see the dot; pass it. |
 | Rich header types in templates | ⏳ | Flat maps only. |
 | Streaming uploads from `forward` | ⏳ | A string body or nothing. |
+
+---
+
+## Testing
+
+Unit tests run inside the pinned builder image:
+
+```bash
+sh test/unit.sh
+```
+
+The end-to-end suite runs against the image built by `./build.sh`:
+
+```bash
+./build.sh
+E2E_IMAGE=caddy-forward:test sh test/e2e.sh
+```
+
+The e2e suite exercises every method, placeholders, response passthrough, the
+template functions, `USE`, the response-size cap, timeouts, and Caddyfile
+validation. It starts Caddy with `test/e2e/Caddyfile` and uses loopback
+backends inside the container, so it needs no external network.
+

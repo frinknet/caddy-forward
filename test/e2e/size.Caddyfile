@@ -1,0 +1,30 @@
+{
+	admin off
+	http_port 80
+	https_port 0
+
+	forward {
+		max_response_size 50
+	}
+}
+
+:80 {
+	route /small {
+		forward GET http://127.0.0.1:2081/
+	}
+
+	route /big {
+		forward GET http://127.0.0.1:2086/big.txt
+	}
+}
+
+:2081 {
+	bind 127.0.0.1
+	respond "small-ok" 200
+}
+
+:2086 {
+	bind 127.0.0.1
+	root * /e2e
+	file_server
+}

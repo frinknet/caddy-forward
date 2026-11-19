@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 )
@@ -25,7 +26,10 @@ func parseGlobalForward(d *caddyfile.Dispenser, existingVal any) (any, error) {
 	if err := app.UnmarshalCaddyfile(d); err != nil {
 		return nil, err
 	}
-	return app, nil
+	return httpcaddyfile.App{
+		Name:  "forward",
+		Value: caddyconfig.JSON(app, nil),
+	}, nil
 }
 
 // App is the optional global app module `forward`.

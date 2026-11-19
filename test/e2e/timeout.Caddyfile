@@ -1,0 +1,20 @@
+{
+	admin off
+	http_port 80
+	https_port 0
+
+	forward {
+		timeout 1ns
+	}
+}
+
+:80 {
+	route /slow {
+		forward GET http://127.0.0.1:2081/
+	}
+}
+
+:2081 {
+	bind 127.0.0.1
+	respond "too-slow" 200
+}

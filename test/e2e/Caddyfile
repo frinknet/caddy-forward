@@ -1,0 +1,180 @@
+{
+	admin off
+	http_port 80
+	https_port 0
+
+	forward {
+		timeout           5s
+		max_response_size 10485760
+	}
+}
+
+# ── Backends ──────────────────────────────────────────────────────────────
+:2081 {
+	bind 127.0.0.1
+	respond "backend-ok" 200
+}
+
+:2082 {
+	bind 127.0.0.1
+	header Content-Type text/plain
+	respond "method={http.request.method} uri={http.request.uri} auth={http.request.header.Authorization} x={http.request.header.X-Value} ct={http.request.header.Content-Type}"
+}
+
+:2083 {
+	bind 127.0.0.1
+	respond "{http.request.body}"
+}
+
+:2084 {
+	bind 127.0.0.1
+	header X-Backend header-value
+	header Content-Type text/plain
+	respond "created" 201
+}
+
+:2085 {
+	bind 127.0.0.1
+	respond "upstream-error" 500
+}
+
+:2086 {
+	bind 127.0.0.1
+	root * /e2e
+	file_server
+}
+
+:2087 {
+	bind 127.0.0.1
+	respond "ct={http.request.header.Content-Type} body={http.request.body}"
+}
+
+# ── Forward directive ─────────────────────────────────────────────────────
+:80 {
+	route /t/get {
+		forward GET http://127.0.0.1:2081/
+	}
+
+	route /t/params {
+		forward GET http://127.0.0.1:2082/base {
+			param q caddy
+		}
+	}
+
+	route /t/headers {
+		forward GET http://127.0.0.1:2082/headers {
+			header Authorization "Bearer test"
+			header X-Value "x-header"
+		}
+	}
+
+	route /t/post {
+		forward POST http://127.0.0.1:2083/ {
+			body "hello body"
+		}
+	}
+
+	route /t/post-text {
+		forward POST http://127.0.0.1:2087/ {
+			body "text body"
+		}
+	}
+
+	route /t/post-json {
+		forward POST http://127.0.0.1:2087/ {
+			header Content-Type application/json
+			body "hello-json"
+		}
+	}
+
+	route /t/put {
+		forward PUT http://127.0.0.1:2083/ {
+			body "put body"
+		}
+	}
+
+	route /t/patch {
+		forward PATCH http://127.0.0.1:2083/ {
+			body "patch body"
+		}
+	}
+
+	route /t/delete {
+		forward DELETE http://127.0.0.1:2082/q {
+			param q caddy
+		}
+	}
+
+	route /t/options {
+		forward OPTIONS http://127.0.0.1:2082/q {
+			param q caddy
+		}
+	}
+
+	route /t/head {
+		forward HEAD http://127.0.0.1:2081/
+	}
+
+	route /t/pass-status {
+		forward GET http://127.0.0.1:2084/
+	}
+
+	route /t/pass-5xx {
+		forward GET http://127.0.0.1:2085/
+	}
+
+	route /t/network-error {
+		forward GET http://127.0.0.1:1/
+	}
+
+	route /t/placeholders {
+		forward GET "http://127.0.0.1:2082/echo?q={http.request.uri.query.q}" {
+			header X-Value "{http.request.uri.query.v}"
+		}
+	}
+
+	route /t/param-placeholder {
+		forward GET http://127.0.0.1:2082/ {
+			param q "{http.request.uri.query.v}"
+		}
+	}
+
+	route /t/body-placeholder {
+		forward POST http://127.0.0.1:2083/ {
+			body "{http.request.uri.query.v}"
+		}
+	}
+
+	route /t/terminal {
+		forward GET http://127.0.0.1:2081/
+		respond "next-handler" 200
+	}
+
+	handle_path /t/tpl/* {
+		root * /e2e/tmpl
+		templates {
+			extensions {
+				forward_methods
+			}
+		}
+		file_server
+	}
+
+	route /t/use {
+		root * /e2e/tmpl
+		forward USE use-page.html {
+			param q caddy
+			body "hello body"
+		}
+	}
+
+	route /t/use-api {
+		root * /e2e/tmpl
+		forward USE use-api.html
+	}
+
+	route /t/use-missing {
+		root * /e2e/tmpl
+		forward USE missing.html
+	}
+}

@@ -11,6 +11,7 @@ import (
 
 func init() {
 	httpcaddyfile.RegisterHandlerDirective("forward", parseCaddyfile)
+	httpcaddyfile.RegisterDirectiveOrder("forward", httpcaddyfile.Before, "file_server")
 }
 
 func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
