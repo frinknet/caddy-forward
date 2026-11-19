@@ -10,8 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/template"
 	"testing"
+	"text/template"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
@@ -151,7 +151,7 @@ func TestTemplateIntegrationGet(t *testing.T) {
 	defer backend.Close()
 
 	// Use a real requester, call Send directly (as CustomTemplateFunctions does)
-	r := subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024)
+	r := subreq.NewRequester(5*time.Second, 10*1024*1024)
 
 	funcs := template.FuncMap{
 		"GET": func(url string, headers, data any) subreq.Response {
@@ -174,7 +174,7 @@ func TestTemplateIntegrationPostWithBody(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	r := subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024)
+	r := subreq.NewRequester(5*time.Second, 10*1024*1024)
 	funcs := template.FuncMap{
 		"POST": func(url string, headers, data any) subreq.Response {
 			return r.Send(context.Background(), "POST", url, headers, data)
@@ -188,7 +188,7 @@ func TestTemplateIntegrationPostWithBody(t *testing.T) {
 }
 
 func TestTemplateIntegrationNetworkError(t *testing.T) {
-	r := subreq.NewRequester(1 * time.Second, 10 * 1024 * 1024)
+	r := subreq.NewRequester(1*time.Second, 10*1024*1024)
 	funcs := template.FuncMap{
 		"GET": func(url string, headers, data any) subreq.Response {
 			return r.Send(context.Background(), "GET", url, headers, data)
@@ -212,7 +212,7 @@ func writeFile(t *testing.T, dir, name, body string) {
 
 func testContext(t *testing.T, dir, target string) *caddytpl.TemplateContext {
 	t.Helper()
-	funcs := MethodFuncs(subreq.NewRequester(5*time.Second, 1024))
+	funcs := MethodFuncs(context.Background(), subreq.NewRequester(5*time.Second, 1024))
 	req := httptest.NewRequest("GET", target, nil)
 	repl := caddy.NewReplacer()
 	repl.Set("http.request.uri.path", target)
@@ -225,7 +225,7 @@ func testContext(t *testing.T, dir, target string) *caddytpl.TemplateContext {
 }
 
 func TestMethodFuncsIncludesUse(t *testing.T) {
-	funcs := MethodFuncs(subreq.NewRequester(5*time.Second, 1024))
+	funcs := MethodFuncs(context.Background(), subreq.NewRequester(5*time.Second, 1024))
 	if _, ok := funcs["USE"]; !ok {
 		t.Errorf("MethodFuncs should expose USE")
 	}
@@ -233,6 +233,37 @@ func TestMethodFuncsIncludesUse(t *testing.T) {
 		if _, ok := funcs[m]; !ok {
 			t.Errorf("MethodFuncs should still expose %s", m)
 		}
+	}
+}
+
+func TestMethodFuncsCancelWithContext(t *testing.T) {
+	started := make(chan struct{})
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+	}))
+	defer backend.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	funcs := MethodFuncs(ctx, subreq.NewRequester(5*time.Second, 1024))
+	get, ok := funcs["GET"].(func(string, any, any) subreq.Response)
+	if !ok {
+		t.Fatal("GET should be a request function")
+	}
+
+	done := make(chan subreq.Response, 1)
+	go func() { done <- get(backend.URL, nil, nil) }()
+
+	<-started
+	cancel()
+
+	select {
+	case resp := <-done:
+		if resp.Err == nil {
+			t.Errorf("canceled call should set Err")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("canceled call did not return")
 	}
 }
 

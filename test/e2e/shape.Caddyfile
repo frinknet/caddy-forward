@@ -1,0 +1,12 @@
+{
+	admin off
+}
+:18080 {
+	route /x {
+		forward POST http://127.0.0.1:2081/x {
+			param  q caddy
+			header X-Test yes
+			body   "body"
+		}
+	}
+}

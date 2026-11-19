@@ -7,4 +7,4 @@ timeout 280 docker run --rm \
   -e GOMODCACHE=/mod \
   -e GOCACHE=/mod/gocache \
   -e CGO_ENABLED=0 caddy:2.11.9-builder-alpine \
-  sh -c 'gofmt -l . && go vet   ./... && go test -timeout=120s ./...'
+  sh -c 'unformatted=$(gofmt -l .); if [ -n "$unformatted" ]; then echo "gofmt needed:"; echo "$unformatted"; exit 1; fi; go vet ./... && go test -timeout=120s ./...'

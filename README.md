@@ -20,11 +20,29 @@ is the goal of `caddy-forward`.
 
 ---
 
-## Quickstart
+## Install
+
+Build a Caddy binary that links the plugin:
 
 ```bash
 xcaddy build --with github.com/frinknet/caddy-forward
 ```
+
+Or build the bundled scratch image, which produces `caddy-forward:test`:
+
+```bash
+./build.sh
+docker run -d -p 80:80 -v /path/to/Caddyfile:/etc/caddy/Caddyfile caddy-forward:test
+```
+
+The image carries Caddy, toybox, CA certificates, and timezone data. See
+`Dockerfile` for the staged build and `build.sh` for the tag derivation.
+
+---
+
+## Quickstart
+
+With the plugin built into Caddy:
 
 ```caddyfile
 :80 {
@@ -116,16 +134,6 @@ work and we are not fighting it.
 {{ "piped-data" | POST "https://api.example.com/echo" nil }}
 ```
 
-### Docker
-
-```bash
-./build.sh          # builds caddy-forward:test
-docker run -d -p 80:80 -v /path/to/Caddyfile:/etc/caddy/Caddyfile caddy-forward:test
-```
-
-See the `Dockerfile` for the scratch image — a few MB, caddy, toybox, and a
-prayer.
-
 ---
 
 ## Forward Directive Reference
@@ -147,7 +155,8 @@ forward METHOD url {
 There is also `USE`, which renders a template file instead of making a request.
 It is covered in its own section below.
 
-Methods fall into two camps, and where your data goes depends on which you pick:
+Methods fall into three camps, and where your data goes depends on which you
+pick:
 
 | Class | Methods | Data goes to |
 |---|---|---|
@@ -162,11 +171,19 @@ Rules and consequences:
 - `body` on a query method is a hard error at startup. You have been warned.
 - `url` is required and goes through the Caddy replacer, as do every param
   name, param value, header value, and body string.
-- The outbound status code, headers (added, not replaced), and body come back
-  to the client unchanged.
+- The outbound status code, headers (added to the response), and body come
+  back to the client unchanged.
 - An upstream `5xx` is passed through as-is. It is not the plugin's problem.
 - A network failure (DNS, TLS, timeout, response over the size cap) becomes a
   `502 Bad Gateway`.
+- Header *names* are literal; header values go through the replacer. Both param
+  names and param values do.
+
+### Placement and ordering
+
+`forward` registers as `http.handlers.forward` and is ordered immediately before
+`file_server`. It is terminal: it answers the request and never calls `next`, so
+put it last in a `route` block. Handlers listed after it will not run.
 
 ---
 
@@ -200,6 +217,9 @@ b={{ placeholder "http.request.body" }}
 ```
 
 `header` is rejected on `USE`, because there is no outbound request to set it on.
+
+The response is `text/html; charset=utf-8` unless the template sets another
+`Content-Type`. A missing file or a template parse error is a `500`.
 
 ### In a template
 
@@ -241,8 +261,9 @@ The `forward_methods` extension registers one function per method:
 {{ USE     "file" . }}
 ```
 
-`headers` is a map (or `nil`). `data` is a string, a dict, or `nil`. Each call
-returns a response with these fields:
+`headers` is a map (or `nil`); its values are stringified before being set.
+`data` is a string, a dict, or `nil`. Each call returns a response with these
+fields:
 
 | Field | Type | Notes |
 |---|---|---|
@@ -252,8 +273,13 @@ returns a response with these fields:
 | `.Err`    | `error` | Set on failure. |
 
 Printing the response directly (`{{ GET ... }}`) prints the body. A failed
-request does **not** abort rendering — it sets `.Err` and prints an empty
-string. Check `.Err` if you care.
+request does **not** abort rendering — it sets `.Err`, leaves `.Status` at `0`,
+and prints an empty string. Check `.Err` if you care.
+
+Calls made from `forward USE` inherit the request context, so a client
+disconnect cancels the outbound fetch. The `forward_methods` extension loaded by
+Caddy's `templates` handler has no request to inherit, so its calls use the
+module lifetime and cancel when the config is unloaded.
 
 ```caddyfile
 templates {
@@ -296,25 +322,94 @@ your uploads in a template and go.
 | `max_response_size` | `10485760` (10 MiB) | Response body cap, in bytes. Exceeding it is a `502` (handler) or `.Err` (template). |
 
 Both apply to the `forward` handler and every template function. Skip the block
-and you get the defaults.
+and you get the defaults. A value of zero or less is replaced by the default
+during provisioning, so you cannot disable the timeout or the size cap.
+
+---
+
+## JSON Configuration
+
+The Caddyfile is a thin wrapper over a handler and a global app. In JSON, the
+handler is `http.handlers.forward` and the global options block is the app
+`forward`.
+
+The handler fields have no custom JSON tags, so they use the Go names and Caddy
+emits them capitalized. Decoding is case-insensitive, so a hand-written config
+may use either case. The global app uses the lowercase tags shown below.
+`caddy adapt` is the source of truth for the exact shape.
+
+```json
+{
+    "apps": {
+        "http": {
+            "servers": {
+                "srv0": {
+                    "listen": [":80"],
+                    "routes": [{
+                        "match": [{"path": ["/api/*"]}],
+                        "handle": [{
+                            "handler": "forward",
+                            "Method": "GET",
+                            "URL": "https://api.example.com/v1/echo",
+                            "Params": [{"Name": "q", "Value": "caddy"}],
+                            "Headers": [{"Name": "Authorization", "Value": "Bearer {env.API_TOKEN}"}],
+                            "Body": "hello"
+                        }]
+                    }]
+                }
+            }
+        },
+        "forward": {
+            "timeout": "5s",
+            "max_response_size": 10485760
+        }
+    }
+}
+```
+
+| Module | ID | Fields |
+|---|---|---|
+| Handler | `http.handlers.forward` | `Method`, `URL`, `Params`, `Headers`, `Body` |
+| Global app | `forward` | `timeout`, `max_response_size` |
+| Template extension | `http.handlers.templates.functions.forward_methods` | none |
+
+`Params` and `Headers` are arrays of `{Name, Value}` objects, so repeated
+entries keep their order and repetition. Validate a JSON config with
+`caddy validate --config caddy.json`.
 
 ---
 
 ## Troubleshooting
 
+Caddyfile parse errors:
+
+| Error | Meaning |
+|---|---|
+| `wrong argument count` | The directive needs exactly `METHOD` and a URL. A missing URL, a missing `USE` path, or an extra argument produces this. |
+| `invalid method: FOO` | Only `GET HEAD POST PUT PATCH DELETE OPTIONS USE`; `TRACE` and `CONNECT` are rejected here. |
+| `unrecognized subdirective: foo` | Only `param`, `header`, and `body` exist. |
+| `invalid timeout` / `invalid max_response_size` | The global option value is not a duration or an integer. |
+| `unrecognized option: foo` | The global block only accepts `timeout` and `max_response_size`. |
+
+Validate-time errors, reachable from JSON config or an adapted config:
+
 | Error | Fix |
 |---|---|
-| `forward: url is required` | Give the directive a URL. |
-| `invalid method: FOO` | Only `GET HEAD POST PUT PATCH DELETE OPTIONS USE`. |
-| `forward: unsupported method "CONNECT"` | Same list, enforced again at validate time. |
+| `forward: url is required` | Give the handler a `url`. |
+| `forward: unsupported method "CONNECT"` | Same method list as above, enforced again. |
 | `forward: body subdirective is only allowed on POST, PUT, PATCH` | Move the body, or the method. |
-| `forward: USE requires a template file` | `USE` needs a path, not nothing. |
-| `forward: USE takes query and body, not header` | Drop the `header` block; there is no outbound request. |
-| `USE ...: needs the template context` | Pass it: `{{ USE "file" . }}`. |
-| `unrecognized subdirective: foo` | Only `param`, `header`, `body` exist. |
-| `502 Bad Gateway` | The outbound call failed. Check logs for DNS, TLS, or timeout. |
+| `forward: USE requires a template file` | `USE` needs a path. |
+| `forward: USE takes query and body, not header` | Drop the `header`; there is no outbound request. |
+
+Runtime and template errors:
+
+| Error | Fix |
+|---|---|
+| `502 Bad Gateway` | The outbound call failed. Check logs for DNS, TLS, timeout, or an oversized response. |
 | `response body exceeds max size` | Raise `max_response_size`. |
 | `dict body needs a form Content-Type` | Drop the odd `Content-Type`, or send a string. |
+| `USE ...: needs the template context` | Pass it: `{{ USE "file" . }}`. |
+| `forward USE` returns `500` | The file is missing or the template failed to parse. |
 | Template prints the call literally | The template handler is not configured with `forward_methods`, or the file is not being processed. |
 
 ---
@@ -332,6 +427,33 @@ and you get the defaults.
 | Implicit parent context in `USE` | ❌ | Go template functions cannot see the dot; pass it. |
 | Rich header types in templates | ⏳ | Flat maps only. |
 | Streaming uploads from `forward` | ⏳ | A string body or nothing. |
+| Forwarding the incoming body | ❌ | `body` is a literal string; the client request body is not reused. |
+| Template request cancellation | ⏳ | `forward USE` cancels with the request. The `forward_methods` extension does not; Caddy gives custom functions no request context. The client timeout still applies. |
+| Redirect policy | ❌ | The client follows up to 10 redirects. There is no way to disable it. |
+| Custom TLS | ❌ | System roots only; no `insecure_skip_verify` or client certificates. |
+| Cookie jar | ❌ | Each fetch is independent; no cookies are stored between calls. |
+| Disabling the limits | ❌ | `timeout` and `max_response_size` fall back to the defaults when zero or less. |
+
+---
+
+## Project Layout
+
+| Path | Contents |
+|---|---|
+| `forward.go` | Root file. Blank-imports the packages so their `init()` registrations run. |
+| `pkg/forward/` | `forward` directive, Caddyfile parsing, handler, `USE`. |
+| `pkg/template/` | `forward_methods` template functions and `USE` rendering. |
+| `pkg/subreq/` | Shared HTTP client, request encoding, response size cap. |
+| `pkg/encoding/` | Form, multipart, and query encoding. |
+| `pkg/config/` | Global `forward` app: timeout and response-size dials. |
+| `test/unit.sh` | `gofmt`, `go vet`, and unit tests in the builder image. |
+| `test/race.sh` | Race detector in the builder image. |
+| `test/e2e.sh` | End-to-end checks against the built image. |
+| `test/e2e/` | Caddyfiles, JSON configs, templates, and fixtures for the e2e suite. |
+| `www/` | Demo site shipped in the image. |
+| `build.sh` | Builds `<slug>:test` from `NOTICE`. |
+| `Dockerfile` | Multi-stage scratch image. |
+| `spec.md` | Target design and non-goals. `README.md` is the shipped behavior. |
 
 ---
 
@@ -343,6 +465,15 @@ Unit tests run inside the pinned builder image:
 sh test/unit.sh
 ```
 
+It fails on a file that needs `gofmt`, a `go vet` complaint, or a failing test,
+and it never touches the host Go toolchain.
+
+The race detector needs cgo, so it runs in its own container:
+
+```bash
+sh test/race.sh
+```
+
 The end-to-end suite runs against the image built by `./build.sh`:
 
 ```bash
@@ -351,7 +482,8 @@ E2E_IMAGE=caddy-forward:test sh test/e2e.sh
 ```
 
 The e2e suite exercises every method, placeholders, response passthrough, the
-template functions, `USE`, the response-size cap, timeouts, and Caddyfile
-validation. It starts Caddy with `test/e2e/Caddyfile` and uses loopback
-backends inside the container, so it needs no external network.
+template functions, `USE`, the response-size cap, timeouts, Caddyfile and JSON
+validation, and the adapted handler field names. It starts Caddy with
+`test/e2e/Caddyfile` and uses loopback backends inside the container, so it
+needs no external network.
 

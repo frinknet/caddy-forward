@@ -13,15 +13,15 @@ import (
 
 // Helper: shared requester with generous limits.
 func testRequester() *Requester {
-	return NewRequester(5 * time.Second, 10 * 1024 * 1024)
+	return NewRequester(5*time.Second, 10*1024*1024)
 }
 
 // Helper: inspect incoming request with a dict body for form/multipart analysis.
 type inspected struct {
-	method     string
-	url        string
-	headers    http.Header
-	body       string
+	method      string
+	url         string
+	headers     http.Header
+	body        string
 	contentType string
 }
 
@@ -323,7 +323,7 @@ func TestSendCustomHeaders(t *testing.T) {
 // ── Error-path tests ──────────────────────────────────────────────────────
 
 func TestSendNetworkFailure(t *testing.T) {
-	r := NewRequester(1 * time.Second, 10 * 1024 * 1024)
+	r := NewRequester(1*time.Second, 10*1024*1024)
 	resp := r.Send(context.Background(), "GET", "http://127.0.0.1:1/nonexistent", nil, nil)
 	if resp.Err == nil {
 		t.Errorf("network failure should set Err")
@@ -343,7 +343,7 @@ func TestSendResponseExceedsMaxSize(t *testing.T) {
 	}))
 	defer server.Close()
 
-	r := NewRequester(5 * time.Second, 5) // max 5 bytes
+	r := NewRequester(5*time.Second, 5) // max 5 bytes
 	resp := r.Send(context.Background(), "GET", server.URL, nil, nil)
 	if resp.Err == nil {
 		t.Errorf("oversize response should set Err")

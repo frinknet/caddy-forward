@@ -18,12 +18,13 @@ IMAGE=${E2E_IMAGE:-"$SLUG:test"}
 CONTAINER="caddy-forward-e2e-main-$$"
 CONTAINER_SIZE="caddy-forward-e2e-size-$$"
 CONTAINER_TIMEOUT="caddy-forward-e2e-timeout-$$"
+CONTAINER_JSON="caddy-forward-e2e-json-$$"
 
 PASS=0
 FAIL=0
 
 cleanup() {
-	docker rm -f "$CONTAINER" "$CONTAINER_SIZE" "$CONTAINER_TIMEOUT" >/dev/null 2>&1 || true
+	docker rm -f "$CONTAINER" "$CONTAINER_SIZE" "$CONTAINER_TIMEOUT" "$CONTAINER_JSON" >/dev/null 2>&1 || true
 	rm -rf "$TMP"
 }
 trap cleanup EXIT INT TERM
@@ -139,6 +140,20 @@ start_container() {
 	printf '%s' "$START_PORT"
 }
 
+start_container_json() {
+	START_NAME=$1
+	START_CONFIG=$2
+	docker run -d --name "$START_NAME" --no-healthcheck \
+		-p "127.0.0.1::80" \
+		-v "$START_CONFIG:/etc/caddy/caddy.json:ro" \
+		"$IMAGE" run --config /etc/caddy/caddy.json >/dev/null
+	START_PORT=$(timeout 10 docker port "$START_NAME" 80/tcp | head -n1 | sed 's/.*://')
+	if [ -z "$START_PORT" ]; then
+		return 1
+	fi
+	printf '%s' "$START_PORT"
+}
+
 fail_start() {
 	echo "container $1 did not become ready" >&2
 	timeout 10 docker logs "$1" 2>&1 | tail -n 40 || true
@@ -153,6 +168,21 @@ validate_ok() {
 		-v "$VALIDATE_CFG:/etc/caddy/Caddyfile:ro" \
 		--entrypoint /bin/caddy "$IMAGE" \
 		validate --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1) || VALIDATE_STATUS=$?
+	if [ "$VALIDATE_STATUS" -eq 0 ]; then
+		pass "$VALIDATE_DESC"
+	else
+		fail "$VALIDATE_DESC" "exit=$VALIDATE_STATUS output=$VALIDATE_OUT"
+	fi
+}
+
+validate_json_ok() {
+	VALIDATE_DESC=$1
+	VALIDATE_CFG=$2
+	VALIDATE_STATUS=0
+	VALIDATE_OUT=$(timeout 30 docker run --rm \
+		-v "$VALIDATE_CFG:/etc/caddy/caddy.json:ro" \
+		--entrypoint /bin/caddy "$IMAGE" \
+		validate --config /etc/caddy/caddy.json 2>&1) || VALIDATE_STATUS=$?
 	if [ "$VALIDATE_STATUS" -eq 0 ]; then
 		pass "$VALIDATE_DESC"
 	else
@@ -358,9 +388,47 @@ check_eq "forward USE inherits template functions" "200" "$(cat "$TMP/body")"
 request "$PORT" GET /t/use-missing
 check_eq "forward USE reports a missing file" "500" "$STATUS"
 
-# ── Test 4: max_response_size ─────────────────────────────────────────────
+# ── Test 4: JSON configuration ────────────────────────────────────────────
 echo ""
-echo "=== Test 4: max_response_size ==="
+echo "=== Test 4: JSON configuration ==="
+
+validate_json_ok "JSON config validates" "$ROOT/test/e2e/shape.json"
+
+if ! JSON_PORT=$(start_container_json "$CONTAINER_JSON" "$ROOT/test/e2e/shape.json"); then
+	fail "start JSON container" "docker run failed"
+else
+	if ! wait_ready "$JSON_PORT" /; then
+		fail_start "$CONTAINER_JSON"
+	fi
+	request "$JSON_PORT" POST /
+	check_eq "JSON handler status" "200" "$STATUS"
+	body_eq "JSON handler decodes and serves capitalized fields" "method=POST body=hello q=json x=yes"
+fi
+
+# ── Test 5: adapted handler shape ─────────────────────────────────────────
+echo ""
+echo "=== Test 5: adapted handler shape ==="
+
+ADAPT_STATUS=0
+ADAPT_OUT=$(timeout 30 docker run --rm \
+	-v "$ROOT/test/e2e/shape.Caddyfile:/etc/caddy/Caddyfile:ro" \
+	--entrypoint /bin/caddy "$IMAGE" \
+	adapt --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1) || ADAPT_STATUS=$?
+if [ "$ADAPT_STATUS" -ne 0 ]; then
+	fail "adapt shape Caddyfile" "exit=$ADAPT_STATUS output=$ADAPT_OUT"
+else
+	for FIELD in Method URL Params Headers Body; do
+		if printf '%s' "$ADAPT_OUT" | grep -q "\"$FIELD\""; then
+			pass "adapted handler keeps $FIELD"
+		else
+			fail "adapted handler keeps $FIELD" "missing \"$FIELD\" in adapted JSON"
+		fi
+	done
+fi
+
+# ── Test 6: max_response_size ─────────────────────────────────────────────
+echo ""
+echo "=== Test 6: max_response_size ==="
 
 if ! SIZE_PORT=$(start_container "$CONTAINER_SIZE" "$ROOT/test/e2e/size.Caddyfile"); then
 	fail "start size container" "docker run failed"
@@ -375,9 +443,9 @@ else
 	check_eq "response over the cap becomes 502" "502" "$STATUS"
 fi
 
-# ── Test 5: timeout ───────────────────────────────────────────────────────
+# ── Test 7: timeout ───────────────────────────────────────────────────────
 echo ""
-echo "=== Test 5: timeout ==="
+echo "=== Test 7: timeout ==="
 
 if ! TIMEOUT_PORT=$(start_container "$CONTAINER_TIMEOUT" "$ROOT/test/e2e/timeout.Caddyfile"); then
 	fail "start timeout container" "docker run failed"
@@ -389,9 +457,9 @@ else
 	check_eq "expired timeout becomes 502" "502" "$STATUS"
 fi
 
-# ── Test 6: validation ────────────────────────────────────────────────────
+# ── Test 8: validation ────────────────────────────────────────────────────
 echo ""
-echo "=== Test 6: validation ==="
+echo "=== Test 8: validation ==="
 
 validate_ok "main Caddyfile validates" "$ROOT/test/e2e/Caddyfile"
 validate_ok "size Caddyfile validates" "$ROOT/test/e2e/size.Caddyfile"

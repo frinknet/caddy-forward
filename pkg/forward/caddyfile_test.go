@@ -49,7 +49,7 @@ func TestConfigParseTimeoutAndMaxSize(t *testing.T) {
 		t.Errorf("should parse: %v", err)
 		return
 	}
-	if a.Timeout != caddy.Duration(30 * time.Second) {
+	if a.Timeout != caddy.Duration(30*time.Second) {
 		t.Errorf("timeout should be 30s, got %v", a.Timeout)
 	}
 	if a.MaxResponseSize != 2000000 {
@@ -63,7 +63,7 @@ func TestConfigParseTimeoutOnly(t *testing.T) {
 		t.Errorf("should parse: %v", err)
 		return
 	}
-	if a.Timeout != caddy.Duration(5 * time.Second) {
+	if a.Timeout != caddy.Duration(5*time.Second) {
 		t.Errorf("timeout should be 5s, got %v", a.Timeout)
 	}
 }
@@ -429,7 +429,7 @@ func TestCaddyfileParseAndServe(t *testing.T) {
 	}
 
 	// Set up requester (bypass Provision for test)
-	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
 
 	// Serve
 	recorder := httptest.NewRecorder()
@@ -467,7 +467,7 @@ func TestCaddyfileParseAndServeWithParam(t *testing.T) {
 		t.Errorf("parse error: %v", err)
 		return
 	}
-	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "http://test/", nil)
@@ -500,7 +500,7 @@ func TestCaddyfileParseAndServeWithHeader(t *testing.T) {
 		t.Errorf("parse error: %v", err)
 		return
 	}
-	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "http://test/", nil)
@@ -534,7 +534,7 @@ func TestCaddyfileParseAndServePostWithBody(t *testing.T) {
 		t.Errorf("parse error: %v", err)
 		return
 	}
-	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "http://test/", nil)
@@ -566,7 +566,7 @@ func TestCaddyfileParseAndServeUpstream5xx(t *testing.T) {
 		t.Errorf("parse error: %v", err)
 		return
 	}
-	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "http://test/", nil)
@@ -592,7 +592,7 @@ func TestCaddyfileParseAndServeNetworkError(t *testing.T) {
 		t.Errorf("parse error: %v", err)
 		return
 	}
-	h.SetRequester(subreq.NewRequester(1 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(1*time.Second, 10*1024*1024))
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "http://test/", nil)

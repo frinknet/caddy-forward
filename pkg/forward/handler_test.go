@@ -109,7 +109,7 @@ func TestForwardHandlerServeGetOK(t *testing.T) {
 		Method: "GET",
 		URL:    backend.URL,
 	}
-	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "http://test/", nil)
@@ -148,7 +148,7 @@ func TestForwardHandlerServePostWithBody(t *testing.T) {
 		URL:    backend.URL,
 		Body:   "request-body",
 	}
-	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "http://test/", nil)
@@ -182,7 +182,7 @@ func TestForwardHandlerServeWithParams(t *testing.T) {
 		URL:    backend.URL,
 		Params: []Param{Param{Name: "q", Value: "caddy"}},
 	}
-	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "http://test/", nil)
@@ -214,7 +214,7 @@ func TestForwardHandlerServeWithHeaders(t *testing.T) {
 			Header{Name: "Authorization", Value: "Bearer secret"},
 		},
 	}
-	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "http://test/", nil)
@@ -235,7 +235,7 @@ func TestForwardHandlerServeUpstream5xx(t *testing.T) {
 		Method: "GET",
 		URL:    backend.URL,
 	}
-	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "http://test/", nil)
@@ -259,7 +259,7 @@ func TestForwardHandlerServeNetworkErrorReturns502(t *testing.T) {
 		Method: "GET",
 		URL:    "http://127.0.0.1:1/",
 	}
-	h.SetRequester(subreq.NewRequester(1 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(1*time.Second, 10*1024*1024))
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "http://test/", nil)
@@ -289,7 +289,7 @@ func TestForwardHandlerServeWithPlaceholderURL(t *testing.T) {
 		Method: "GET",
 		URL:    backend.URL + "/{http.request.uri.path}",
 	}
-	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
 
 	repl := caddy.NewReplacer()
 	repl.Set("http.request.uri.path", "/placeholder")
@@ -322,7 +322,7 @@ func TestForwardHandlerServeWithPlaceholderParam(t *testing.T) {
 		URL:    backend.URL,
 		Params: []Param{{Name: "q", Value: "{http.request.uri.query.q}"}},
 	}
-	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
 
 	repl := caddy.NewReplacer()
 	repl.Set("http.request.uri.query.q", "caddy")
@@ -358,7 +358,7 @@ func TestForwardHandlerServeWithPlaceholderHeader(t *testing.T) {
 			{Name: "Authorization", Value: "Bearer {http.request.header.Token}"},
 		},
 	}
-	h.SetRequester(subreq.NewRequester(5 * time.Second, 10 * 1024 * 1024))
+	h.SetRequester(subreq.NewRequester(5*time.Second, 10*1024*1024))
 
 	repl := caddy.NewReplacer()
 	repl.Set("http.request.header.Token", "secret123")
@@ -428,6 +428,39 @@ func TestForwardUseServesTemplate(t *testing.T) {
 	}
 	if ct := recorder.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Errorf("content type should be html, got %q", ct)
+	}
+}
+
+func TestForwardUseCancelsTemplateFetch(t *testing.T) {
+	started := make(chan struct{})
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+	}))
+	defer backend.Close()
+
+	dir := t.TempDir()
+	h := useHandler(t, dir, "page.html", `{{ GET "`+backend.URL+`" nil nil }}`)
+
+	req := useRequest(dir, "/page")
+	reqCtx, cancel := context.WithCancel(req.Context())
+	req = req.WithContext(reqCtx)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- h.ServeHTTP(httptest.NewRecorder(), req, nil)
+	}()
+
+	<-started
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("ServeHTTP should succeed after cancellation: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("template fetch did not cancel with the request")
 	}
 }
 

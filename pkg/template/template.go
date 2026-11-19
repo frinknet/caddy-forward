@@ -22,6 +22,7 @@ func init() {
 // Functions implements caddyhttp.CustomFunctions, exposing GET/HEAD/POST/PUT/
 // PATCH/DELETE/OPTIONS plus USE as template functions.
 type Functions struct {
+	ctx       context.Context
 	requester *subreq.Requester
 }
 
@@ -47,20 +48,28 @@ func (f *Functions) Provision(ctx caddy.Context) error {
 		}
 	}
 
+	f.ctx = context.Background()
+	if ctx.Context != nil {
+		f.ctx = ctx
+	}
 	f.requester = subreq.NewRequester(timeout, maxSize)
 	return nil
 }
 
 func (f *Functions) CustomTemplateFunctions() template.FuncMap {
-	return MethodFuncs(f.requester)
+	return MethodFuncs(f.ctx, f.requester)
 }
 
 // MethodFuncs builds the template functions exposed under the
-// `forward_methods` extension: one per HTTP method, plus USE.
-func MethodFuncs(r *subreq.Requester) template.FuncMap {
+// `forward_methods` extension: one per HTTP method, plus USE. Calls use ctx,
+// so canceling it cancels an in-flight outbound request.
+func MethodFuncs(ctx context.Context, r *subreq.Requester) template.FuncMap {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	send := func(method string) func(string, any, any) subreq.Response {
 		return func(url string, headers, data any) subreq.Response {
-			return r.Send(context.Background(), method, url, headers, data)
+			return r.Send(ctx, method, url, headers, data)
 		}
 	}
 	return template.FuncMap{

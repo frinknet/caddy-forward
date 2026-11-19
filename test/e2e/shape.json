@@ -1,0 +1,51 @@
+{
+	"admin": {
+		"disabled": true
+	},
+	"apps": {
+		"http": {
+			"servers": {
+				"main": {
+					"listen": [":80"],
+					"routes": [
+						{
+							"handle": [
+								{
+									"handler": "forward",
+									"Method": "POST",
+									"URL": "http://127.0.0.1:2081/shape",
+									"Params": [
+										{
+											"Name": "q",
+											"Value": "json"
+										}
+									],
+									"Headers": [
+										{
+											"Name": "X-Shape",
+											"Value": "yes"
+										}
+									],
+									"Body": "hello"
+								}
+							]
+						}
+					]
+				},
+				"backend": {
+					"listen": ["127.0.0.1:2081"],
+					"routes": [
+						{
+							"handle": [
+								{
+									"handler": "static_response",
+									"body": "method={http.request.method} body={http.request.body} q={http.request.uri.query.q} x={http.request.header.X-Shape}"
+								}
+							]
+						}
+					]
+				}
+			}
+		}
+	}
+}

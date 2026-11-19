@@ -167,7 +167,7 @@ func (h *ForwardHandler) serveTemplate(w http.ResponseWriter, r *http.Request, r
 		Root:        http.Dir(root),
 		Req:         r,
 		RespHeader:  caddytpl.WrappedHeader{Header: w.Header()},
-		CustomFuncs: []template.FuncMap{forwardtmpl.MethodFuncs(h.requester)},
+		CustomFuncs: []template.FuncMap{forwardtmpl.MethodFuncs(r.Context(), h.requester)},
 	}
 
 	path := h.URL
